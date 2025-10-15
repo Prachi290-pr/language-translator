@@ -20,7 +20,7 @@ const Translator = () => {
     const [playbackRate, setPlaybackRate] = useState(1);
 
     useEffect(() => {
-        fetch("http://localhost:5000/languages")
+        fetch("https://language-translator-64m7.onrender.com/languages")
             .then((res) => {
                 if (!res.ok) {
                     throw new Error("Network response was not ok.");
@@ -45,7 +45,7 @@ const Translator = () => {
         setLoading(true);
 
         try {
-            const res = await fetch("http://localhost:5000/translate", {
+            const res = await fetch("https://language-translator-64m7.onrender.com/translate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
