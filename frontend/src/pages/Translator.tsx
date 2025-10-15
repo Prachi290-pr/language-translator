@@ -5,25 +5,36 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Card } from "../components/ui/card";
 import { Link } from "react-router-dom";
 import { Languages, Mic, Volume2, ArrowLeftRight, Home } from "lucide-react";
-import { toast } from "sonner"; // Sonner's toast function
+import { toast } from "sonner";
 
 const Translator = () => {
-    const [languages, setLanguages] = useState<Record<string, string>>({}); // Add type for languages
+    const [languages, setLanguages] = useState<Record<string, string>>({});
     const [inputText, setInputText] = useState("");
     const [translatedText, setTranslatedText] = useState("");
+    const [translatedTexts, setTranslatedTexts] = useState<string[]>([]);
     const [sourceLang, setSourceLang] = useState("en");
     const [targetLang, setTargetLang] = useState("fr");
     const [loading, setLoading] = useState(false);
+    const [speaking, setSpeaking] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
+    const [playbackRate, setPlaybackRate] = useState(1);
 
     useEffect(() => {
         fetch("http://localhost:5000/languages")
-            .then((res) => res.json())
-            .then((data: Record<string, string>) => setLanguages(data)) // Type the incoming data
+            .then((res) => {
+                if (!res.ok) {
+                    throw new Error("Network response was not ok.");
+                }
+                return res.json();
+            })
+            .then((data: Record<string, string>) => {
+                setLanguages(data);
+            })
             .catch((err) => {
                 console.error(err);
                 toast.error("Failed to load languages. Please check if the backend is running.");
             });
-    }, []); // Removed `toast` from dependency array as it is not a prop or state variable.
+    }, []);
 
     const handleTranslate = async () => {
         if (!inputText.trim()) {
@@ -41,13 +52,16 @@ const Translator = () => {
                     text: inputText,
                     source_lang: sourceLang,
                     target_lang: targetLang,
+                    num_results: 3,
                 }),
             });
 
             const data = await res.json();
             if (data.error) throw new Error(data.error);
 
-            setTranslatedText(data.translated_text);
+            setTranslatedTexts(data.translated_texts);
+            setTranslatedText(data.translated_texts[0]);
+
             toast.success("Your text has been translated successfully.");
         } catch (err: any) {
             toast.error(err.message || "An error occurred during translation.");
@@ -76,13 +90,42 @@ const Translator = () => {
         recognition.start();
     };
 
+    const handlePause = () => {
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.pause();
+            setSpeaking(false);
+            setIsPaused(true); // Manually set to true when paused
+        }
+    };
+
+    const handleResume = () => {
+        if (isPaused) { // Check our custom state
+            window.speechSynthesis.resume();
+            setSpeaking(true);
+            setIsPaused(false); // Manually set to false
+        }
+    };
+
+    const handleStop = () => {
+        window.speechSynthesis.cancel();
+        setSpeaking(false);
+    };
+
     const handleSpeak = () => {
         if (!translatedText) {
             toast.warning("Please translate text first before using text-to-speech.");
             return;
         }
+
+        handleStop();
+
         const utterance = new SpeechSynthesisUtterance(translatedText);
         utterance.lang = targetLang;
+        utterance.rate = playbackRate;
+
+        utterance.onend = () => setSpeaking(false);
+        utterance.onstart = () => setSpeaking(true);
+
         window.speechSynthesis.speak(utterance);
     };
 
@@ -195,17 +238,52 @@ const Translator = () => {
                         </div>
                     </div>
 
-                    <div className="flex justify-end">
-                        <Button
-                            variant="secondary"
-                            onClick={handleSpeak}
-                            disabled={!translatedText}
-                            className="gap-2"
-                        >
-                            <Volume2 className="h-4 w-4" />
-                            Listen
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button variant="secondary" onClick={handleSpeak} disabled={!translatedText} className="gap-2">
+                            <Volume2 className="h-4 w-4" /> Listen
+                        </Button>
+                        {speaking ? (
+                            <Button variant="secondary" onClick={handlePause} className="gap-2">
+                                <Volume2 className="h-4 w-4" /> Pause
+                            </Button>
+                        ) : (
+                            <Button variant="secondary" onClick={handleResume} disabled={!isPaused} className="gap-2">
+                                <Volume2 className="h-4 w-4" /> Resume
+                            </Button>
+                        )}
+                        <Button variant="secondary" onClick={handleStop} disabled={!translatedText} className="gap-2">
+                            <Volume2 className="h-4 w-4" /> Stop
                         </Button>
                     </div>
+
+                    <div className="space-y-2 mt-4">
+                        <label htmlFor="playback-rate" className="text-sm font-medium">
+                            Playback Speed: {playbackRate.toFixed(1)}x
+                        </label>
+                        <input
+                            type="range"
+                            id="playback-rate"
+                            min="0.5"
+                            max="2"
+                            step="0.1"
+                            value={playbackRate}
+                            onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                            className="w-full"
+                        />
+                    </div>
+
+                    {translatedTexts.length > 1 && (
+                        <div className="space-y-2 mt-6">
+                            <h3 className="text-sm font-medium">Alternative Translations:</h3>
+                            <div className="space-y-2">
+                                {translatedTexts.slice(1).map((altText, index) => (
+                                    <div key={index} className="p-3 rounded-lg border border-border bg-muted/30">
+                                        <p className="text-sm text-muted-foreground">{altText}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </Card>
             </div>
         </div>

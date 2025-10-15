@@ -6,7 +6,7 @@ from functools import lru_cache
 app = Flask(__name__)
 CORS(app)
 
-# Supported language pairs (you can add more here)
+# Supported language pairs
 SUPPORTED_LANGS = {
     "en": "English",
     "fr": "French",
@@ -47,11 +47,12 @@ def translate_text():
     text = data.get("text", "").strip()
     src = data.get("source_lang", "en")
     tgt = data.get("target_lang", "fr")
+    num_results = data.get("num_results", 3)
 
     if not text:
         return jsonify({"error": "No text provided"}), 400
     if src == tgt:
-        return jsonify({"translated_text": text})
+        return jsonify({"translated_texts": [text]})
 
     tokenizer, model = load_model(src, tgt)
     if tokenizer is None:
@@ -59,9 +60,18 @@ def translate_text():
 
     try:
         inputs = tokenizer(text, return_tensors="pt", padding=True)
-        outputs = model.generate(**inputs)
-        translation = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
-        return jsonify({"translated_text": translation})
+        # Use beam search to generate multiple translation candidates
+        outputs = model.generate(
+            **inputs,
+            num_beams=num_results,
+            num_return_sequences=num_results,
+            early_stopping=True
+        )
+        
+        # Decode all the generated translations
+        translations = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        
+        return jsonify({"translated_texts": translations})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
